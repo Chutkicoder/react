@@ -1,0 +1,599 @@
+1. socket.io
+app.js
+import express from 'express'
+import path from "path";
+import http from "http"
+import { Server } from 'socket.io';
+
+const app = express()
+const server = http.createServer(app)
+const io = new Server(server)
+
+
+app.use(express.static(path.join(process.cwd(), "public")))
+
+io.on('connection', (socket) => {
+    console.log('client connected', socket.id)
+
+    socket.on('chat', (message)=> {
+        console.log(message)
+
+        io.emit('chat', message)
+    })
+})
+
+server.listen(3000, ()=> {
+    console.log("server is on ")
+})
+
+public/index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+
+    <script src="/socket.io/socket.io.js"></script>
+
+</head>
+<body>
+    <h1>Chat dkldk</h1>
+    <input id="msg" placeholder="Enter message" />
+    <button onclick="sendMessage()">Sned</button>
+    <ul id="messages"></ul>
+
+
+    <script>
+         const socket = io();
+
+         function sendMessage(){
+            const input = document.getElementById('msg')
+            
+            const message = input.value
+            console.log(message)
+
+            socket.emit('chat', message)
+        
+         }
+
+         socket.on('chat', (message) => {
+            const li = document.createElement('li')
+            li.textContent = message
+
+            document.getElementById('messages').appendChild(li)
+
+         })
+    </script>
+</body>
+</html>
+
+
+-------------------------------------------------------
+
+
+
+
+
+2a. mongodb
+import express from "express"
+import mongoose from "mongoose";
+
+const app = express();
+
+app.use(express.json())
+
+
+mongoose.connect('mongodb://127.0.0.1:27017/users')
+.then(() => {console.log("Database connected")})
+.catch( (err) => {
+    console.log("Database not connected")
+    console.error(err);
+})
+
+//Schema
+const userSchema = new mongoose.Schema({
+    name: String,
+    age: Number
+});
+
+//model 
+const User = mongoose.model('User',userSchema) //users
+
+
+//CRUD
+//GET
+app.get('/users',  async (req, res) => {
+    const allUsers = await User.find()
+    res.json(allUsers)
+    
+})
+//POST
+app.post('/users',  async (req, res) => {
+    const newUser = await User.create(req.body)
+    res.json({
+        data: "User created " , newUser
+    })
+    
+    
+ 
+
+});
+
+//PUT
+app.put('/users/:id', async (req, res) => {
+    const updateUser = await User.findByIdAndUpdate(
+        req.params.id,
+        req.body,
+        {new: true}
+    )
+   res.json({
+    data: "User updated" , updateUser
+   })
+    
+    
+})
+//DELTE
+app.delete('/users/:id', async (req, res) => {
+    const deleteUser = await User.findByIdAndDelete(req.params.id)
+    res.json({
+    data: "User delted" , deleteUser
+   })
+})
+
+app.listen(3000, () => {
+    console.log("Servr is running");
+    
+})
+
+//npm install -> buss yehi karna hai 
+//run node app.js
+
+
+------------------------------------------------------------------
+
+
+
+
+
+2b. file upload
+
+import express from "express"
+import mongoose from "mongoose"
+import multer from "multer"
+import fs from "fs"
+
+
+const app = express();
+
+app.use(express.static("public"))
+
+app.use('/uploads', express.static('uploads'))
+
+fs.existsSync("uploads") || fs.mkdirSync("uploads")
+
+mongoose.connect('mongodb://127.0.0.1:27017/Upload')
+.then(() => {
+    console.log("Connected to Database")
+})
+.catch((err) => {
+    console.log(err)
+})
+
+//Schema
+const fileSchema = new mongoose.Schema({
+    filename: String,
+    
+}) 
+
+//Model 
+const File = mongoose.model("File", fileSchema)
+
+//Multer configuration
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads')
+    },
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + "-" + file.originalname)
+    }
+})
+
+
+const upload = multer({storage})
+
+app.get("/upload", (req, res) => {
+    res.sendFile("index.html", {root: "public"})
+})
+
+app.post('/upload', upload.single('files'), async (req, res) => {
+    console.log(req.file)
+    const file = await File.create({
+        filename: req.file.filename
+    })
+    res.send(file)
+})
+
+
+app.get("/files", async (req, res) => {
+    const files = await File.find({})
+    res.send(files)
+})
+
+app.listen(3000, () => {
+    console.log("Server running on port 3000")
+})
+
+public/index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <form enctype="multipart/form-data" id="form">
+        <input type="file" name="files">
+        <button type="submit">Upload</button>
+    </form>
+
+    <h1>Images</h1>
+    <div id="gallery"></div>
+
+    <script>
+        const form = document.getElementById("form")
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault()
+            const formData = new FormData(form)
+            const res = await fetch("/upload", {
+                method: "POST",
+                body: formData
+            })
+            const data = await res.json()
+            console.log(data)
+        })
+
+        async function load(){
+            const gallery = document.getElementById("gallery")
+            const res = await fetch("/files")
+
+            const data = await res.json()
+            
+            data.forEach(file => {
+                const img = document.createElement("img")
+                img.src = "/uploads/" + file.filename
+                img.width = 200
+                img.style.inline = "block"
+                gallery.appendChild(img)
+            })
+            
+        }
+        load()
+        
+    </script>
+</body>
+</html>
+
+
+<!-- //npm install
+//node app.js -->
+
+
+------------------------------------------
+3.
+
+
+
+
+
+
+
+
+
+
+
+ ---------------------------------------
+4: Todo
+npm create vite@latest
+data.json 
+[
+  { "id": 1, "text": "Learn React", "done": false },
+  { "id": 2, "text": "Build TODO App", "done": true }
+]
+
+App.jsx
+import { useState, useEffect } from "react"
+import { TodoForm } from "./TodoForm"
+import { TodoList } from "./TodoList"
+
+
+
+
+export const App = () => {
+  const [todo, setTodos] = useState([])
+
+  const addTodo = (data) => {
+    console.log(data)
+    const newTodo = {
+      id: Date.now(),
+      text: data,
+      done: false
+    }
+
+    setTodos([...todo,newTodo ])
+
+  }
+
+   // toggle done
+  const toggleTodo = (id) => {
+    const updated = todo.map(todo =>
+      todo.id === id ? { ...todo, done: !todo.done } : todo
+    );
+    setTodos(updated);
+  };
+
+  // delete
+  const deleteTodo = (id) => {
+    setTodos(todo.filter(todo => todo.id !== id));
+  };
+
+
+  
+
+  
+  //side effect 
+  useEffect(() => {
+    
+    const getTodos = async () => {
+      const res = await fetch('/data.json')
+      const data = await res.json()
+      // console.log(data);
+
+      setTodos(data)
+
+    }
+    getTodos()
+  }, [])
+
+  console.log(todo)
+  return (
+    <>
+      <h1>TODO APP</h1>
+      <TodoForm addTodo={addTodo}/>
+      <TodoList todo={todo} toggleTodo={toggleTodo} deleteTodo={deleteTodo} />
+    </>
+  )
+}
+
+// https://jsonplaceholder.typicode.com/todos
+
+//TodoForm.jsx
+import {useState} from "react"
+
+export const TodoForm = ({addTodo}) => {
+
+    const [input, setInput] = useState("");
+
+    const handleSubmit = (e) => {
+        e.preventDefault()
+        console.log(input)
+        addTodo(input)
+    }
+    return (
+        <>
+        <h1>TodoForm</h1>
+        <form onSubmit={handleSubmit}>
+            <input 
+                value={input}
+                placeholder="Enter Tdo"
+                onChange={(e) => setInput((e.target.value))}
+            
+            />
+            <button>Add New Todo</button>
+        </form>
+        </>
+    )
+}
+
+//TodoItem.jsx
+
+export const TodoItem = ({todo, toggleTodo, deleteTodo}) => {
+    return (
+        <>
+            <li>
+                <span
+                    onClick={() => toggleTodo(todo.id)}
+                    style={{
+                        textDecoration: todo.done ? "line-through" : "none",
+                        cursor: "pointer",
+                        marginRight: "10px"
+                        }}
+                >
+                    {todo.text}
+                </span>
+
+                <button onClick={() => deleteTodo(todo.id)}>Delete</button>
+            </li>
+        </>
+    )
+}
+
+//TodoList.jsx
+
+import { TodoItem } from "./TodoItem"
+
+export const TodoList = ({todo, toggleTodo, deleteTodo}) => {
+    return (
+        <>
+            <h1>All Todos</h1>
+            <ul>
+                {
+                    todo.map(todo =>(
+                        <TodoItem 
+                            todo = {todo}
+                            toggleTodo= {toggleTodo}
+                            deleteTodo= {deleteTodo}
+                        />
+                    )
+                    )
+                }
+                
+            </ul>
+            
+        </>
+    )
+}
+
+
+
+
+----------------------------------------------------
+
+
+
+
+
+5: Fetch Data
+App.jsx
+import { useEffect, useState } from "react"
+
+export const App = () => {
+  const [country, setCountry] = useState([])
+
+  // console.log(country);
+
+  //side effects
+  useEffect(() => {
+
+    const getAll = async () => {
+      const res = await fetch("https://restcountries.com/v3.1/all?fields=name,flags")
+      const data = await res.json()
+      setCountry(data)
+      
+      
+    }
+    getAll()
+
+
+  }, [])
+
+
+  return (
+    <>
+      <h1>All Fetched data </h1>
+      <ul> 
+        <il>
+           {
+            country.map((c, i) => 
+              <div key={i}>
+                <img src={c.flags.png}/>
+                <p>{c.name.common}</p>
+              </div>
+              
+            )
+          }
+        </il>
+      </ul>
+     
+
+    </>
+  )
+}
+
+npm create vite@latest
+npm run dev -> to run
+
+
+
+
+
+
+
+
+-------------------------------------------
+
+
+6. Validation Form 
+App.jsx
+import { useState } from "react"
+import {useForm} from "react-hook-form"
+import {z} from "zod"
+import {zodResolver}  from "@hookform/resolvers/zod"
+
+
+const userSchema = z.object({
+  name: z.string(),
+  email: z.string().email("Invalid Email"),
+  phoneNumber: z.string().min(10, "Invalid"),
+  password: z.string().min(6, "pasw 6 hona ")
+})
+
+
+export const App = () => {
+  const  [formData, setFormData] = useState({})
+
+  const {
+    register,
+    handleSubmit,
+    formState: {errors},
+    reset
+  } = useForm({resolver: zodResolver(userSchema)})
+
+
+  const onSubmit = (data) => {
+    console.log(data);
+    
+    setFormData(data)
+  }
+
+  return (
+    <>
+      <h1>User Form </h1>
+      <form onSubmit={handleSubmit(onSubmit)}>
+        <input 
+      
+          placeholder="ENter Name"
+          {...register("name")}
+        />
+        
+        <input 
+      
+          placeholder="ENter email"
+          {...register("email")}
+        />
+        <p>{errors.email?.message}</p>
+        <input 
+      
+          placeholder="ENter phoneNumber"
+          {...register("phoneNumber")}
+        />
+        <p>{errors.phoneNumber?.message}</p>
+        <input 
+      
+          placeholder="ENter password"
+          {...register("password")}
+        />
+        <p>{errors.password?.message}</p>
+        
+        <button>Submit</button>
+      </form>
+
+      <h1>Form Data</h1>
+      <div>
+        <p>Name: {formData.name}</p>
+        <p>Email: {formData.email}</p>
+        <p>Phone: {formData.phoneNumber}</p>
+        <p>Password: {formData.password}</p>
+      </div>
+
+    </>
+  )
+}
+
+//react-hook-form 
+//zod
+// @hookform/resolvers
+//npm i 
+
+// npm run dev
